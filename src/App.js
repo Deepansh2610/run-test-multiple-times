@@ -69,6 +69,8 @@ function App() {
         }
 
         appendLog(`Run ${index}/${repeatCountNumber}: retest request accepted.`);
+        appendLog(`Run ${index}/${repeatCountNumber}: waiting before checking status...`);
+        await wait(3000);
 
         let status = 'Pending';
         const startedAt = Date.now();
