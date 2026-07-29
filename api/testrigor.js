@@ -8,7 +8,14 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  const baseUrl = 'https://api.testrigor.com/api/v1';
+  const productionBaseUrl = 'https://api.testrigor.com/api/v1';
+  const resolveBaseUrl = (requestedBaseUrl) => {
+    const parsedBaseUrl = new URL(requestedBaseUrl || productionBaseUrl);
+    if (parsedBaseUrl.protocol !== 'https:' || parsedBaseUrl.username || parsedBaseUrl.password) {
+      throw new Error('Base URL must be an HTTPS URL without embedded credentials.');
+    }
+    return parsedBaseUrl.toString().replace(/\/$/, '');
+  };
   const withTimeout = async (promise, timeoutMs) => {
     let timeoutId;
     const timeoutPromise = new Promise((_, reject) => {
@@ -28,6 +35,7 @@ module.exports = async function handler(req, res) {
       const testCaseUuid = req.query?.testCaseUuid;
       const authToken = req.headers['auth-token'];
       const action = req.query?.action;
+      const requestedBaseUrl = req.query?.baseUrl;
 
       if (action !== 'status') {
         res.status(400).json({ success: false, message: 'Unsupported GET action.' });
@@ -39,6 +47,14 @@ module.exports = async function handler(req, res) {
           success: false,
           message: 'suiteId, testCaseUuid, and auth-token are required.',
         });
+        return;
+      }
+
+      let baseUrl;
+      try {
+        baseUrl = resolveBaseUrl(requestedBaseUrl);
+      } catch (error) {
+        res.status(400).json({ success: false, message: error.message });
         return;
       }
 
@@ -83,7 +99,7 @@ module.exports = async function handler(req, res) {
       return;
     }
 
-    const { suiteId, authToken, testCaseUuid, action = 'retest' } = req.body || {};
+    const { suiteId, authToken, testCaseUuid, baseUrl: requestedBaseUrl, action = 'retest' } = req.body || {};
 
     if (action !== 'retest') {
       res.status(400).json({ success: false, message: 'Unsupported POST action.' });
@@ -95,6 +111,14 @@ module.exports = async function handler(req, res) {
         success: false,
         message: 'suiteId, authToken, and testCaseUuid are required.',
       });
+      return;
+    }
+
+    let baseUrl;
+    try {
+      baseUrl = resolveBaseUrl(requestedBaseUrl);
+    } catch (error) {
+      res.status(400).json({ success: false, message: error.message });
       return;
     }
 

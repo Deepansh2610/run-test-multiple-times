@@ -1,6 +1,9 @@
 import { useRef, useState } from 'react';
 import './App.css';
 
+const productionBaseUrl = 'https://api.testrigor.com/api/v1';
+const preProductionBaseUrl = 'https://app-preprod.testrigor.com/api/v1';
+
 const repeatValues = [2, 5, 10];
 const successfulCompletionStatuses = new Set(['finished', 'passed']);
 const failedStatuses = new Set(['failed']);
@@ -20,6 +23,8 @@ function App() {
   const [repeatCount, setRepeatCount] = useState('5');
   const [suiteId, setSuiteId] = useState('');
   const [authToken, setAuthToken] = useState('');
+  const [environment, setEnvironment] = useState('production');
+  const [customBaseUrl, setCustomBaseUrl] = useState('');
   const [testCaseUuid, setTestCaseUuid] = useState('');
   const [formError, setFormError] = useState('');
   const [runs, setRuns] = useState([]);
@@ -47,6 +52,7 @@ function App() {
     const {
       id,
       suiteId: runSuiteId,
+      baseUrl: runBaseUrl,
       authToken: runAuthToken,
       testCaseUuid: runTestCaseUuid,
       requestedRuns,
@@ -72,6 +78,7 @@ function App() {
           body: JSON.stringify({
             suiteId: runSuiteId,
             authToken: runAuthToken,
+            baseUrl: runBaseUrl,
             testCaseUuid: runTestCaseUuid,
             action: 'retest',
           }),
@@ -95,6 +102,7 @@ function App() {
             suiteId: runSuiteId,
             testCaseUuid: runTestCaseUuid,
             action: 'status',
+            baseUrl: runBaseUrl,
           });
           const statusResponse = await fetch(`/api/testrigor?${statusParams.toString()}`, {
             method: 'GET',
@@ -189,10 +197,36 @@ function App() {
       return;
     }
 
+    let baseUrl = productionBaseUrl;
+
+    if (environment === 'pre-production') {
+      baseUrl = preProductionBaseUrl;
+    }
+
+    if (environment === 'custom') {
+      if (!customBaseUrl.trim()) {
+        setFormError('Enter a custom Base URL.');
+        return;
+      }
+
+      try {
+        const parsedBaseUrl = new URL(customBaseUrl.trim());
+        if (parsedBaseUrl.protocol !== 'https:') {
+          throw new Error('Custom Base URL must use HTTPS.');
+        }
+        baseUrl = parsedBaseUrl.toString().replace(/\/$/, '');
+      } catch (error) {
+        setFormError(error.message || 'Enter a valid custom Base URL.');
+        return;
+      }
+    }
+
     const requestedRuns = Number(repeatCount);
     const run = {
       id: createRunId(),
       suiteId,
+      environment,
+      baseUrl,
       authToken,
       testCaseUuid,
       requestedRuns,
@@ -236,6 +270,22 @@ function App() {
               ))}
             </select>
           </label>
+
+          <label className="field">
+            <span>Environment</span>
+            <select value={environment} onChange={(event) => setEnvironment(event.target.value)}>
+              <option value="production">Production</option>
+              <option value="pre-production">Pre-production</option>
+              <option value="custom">Custom</option>
+            </select>
+          </label>
+
+          {environment === 'custom' && (
+            <label className="field">
+              <span>Custom Base URL</span>
+              <input type="url" value={customBaseUrl} onChange={(event) => setCustomBaseUrl(event.target.value)} placeholder="https://example.testrigor.com/api/v1" />
+            </label>
+          )}
 
           <label className="field">
             <span>Suite ID</span>
