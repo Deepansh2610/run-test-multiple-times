@@ -1,8 +1,39 @@
-import { render, screen } from '@testing-library/react';
-import App from './App';
+import { fireEvent, render, screen } from '@testing-library/react';
+import App, { isSuccessfulCompletion } from './App';
 
-test('renders learn react link', () => {
+test('renders the retry runner form', () => {
   render(<App />);
-  const linkElement = screen.getByText(/learn react/i);
-  expect(linkElement).toBeInTheDocument();
+
+  expect(screen.getByRole('heading', { name: /testrigor retry runner/i })).toBeInTheDocument();
+  expect(screen.getByLabelText(/run count/i)).toHaveValue('5');
+  expect(screen.getByLabelText(/suite id/i)).toBeInTheDocument();
+  expect(screen.getByLabelText(/auth token/i)).toHaveAttribute('type', 'password');
+  expect(screen.getByLabelText(/test case uuid/i)).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'RUN' })).toBeEnabled();
+});
+
+test('recognizes terminal testcase statuses', () => {
+  expect(isSuccessfulCompletion('Passed')).toBe(true);
+  expect(isSuccessfulCompletion('Finished')).toBe(true);
+  expect(isSuccessfulCompletion('Pending')).toBe(false);
+});
+
+test('creates an expandable run card and clears the submitted UUID', () => {
+  const originalFetch = global.fetch;
+  global.fetch = jest.fn(() => new Promise(() => {}));
+  render(<App />);
+
+  fireEvent.change(screen.getByLabelText(/suite id/i), { target: { value: 'suite-1' } });
+  fireEvent.change(screen.getByLabelText(/auth token/i), { target: { value: 'token-1' } });
+  fireEvent.change(screen.getByLabelText(/test case uuid/i), { target: { value: 'case-1' } });
+  fireEvent.click(screen.getByRole('button', { name: 'RUN' }));
+
+  expect(screen.getByText('case-1')).toBeInTheDocument();
+  expect(screen.getByText('Still running')).toBeInTheDocument();
+  expect(screen.getByLabelText(/test case uuid/i)).toHaveValue('');
+
+  fireEvent.click(screen.getByText('case-1'));
+  expect(screen.getByRole('heading', { name: /run summary/i })).toBeInTheDocument();
+
+  global.fetch = originalFetch;
 });

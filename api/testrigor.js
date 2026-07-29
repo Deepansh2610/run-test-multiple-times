@@ -25,6 +25,7 @@ module.exports = async function handler(req, res) {
   try {
     if (req.method === 'GET') {
       const suiteId = req.query?.suiteId;
+      const testCaseUuid = req.query?.testCaseUuid;
       const authToken = req.headers['auth-token'];
       const action = req.query?.action;
 
@@ -33,14 +34,18 @@ module.exports = async function handler(req, res) {
         return;
       }
 
-      if (!suiteId || !authToken) {
-        res.status(400).json({ success: false, message: 'suiteId and auth-token are required.' });
+      if (!suiteId || !testCaseUuid || !authToken) {
+        res.status(400).json({
+          success: false,
+          message: 'suiteId, testCaseUuid, and auth-token are required.',
+        });
         return;
       }
 
       const encodedSuiteId = encodeURIComponent(suiteId);
+      const encodedTestCaseUuid = encodeURIComponent(testCaseUuid);
       const statusResponse = await withTimeout(
-        fetch(`${baseUrl}/apps/${encodedSuiteId}/status`, {
+        fetch(`${baseUrl}/apps/${encodedSuiteId}/testcase/status?testCaseUuids=${encodedTestCaseUuid}`, {
           headers: {
             'auth-token': authToken,
           },
@@ -61,9 +66,13 @@ module.exports = async function handler(req, res) {
         return;
       }
 
+      const matchingTestCase = Array.isArray(statusBody?.testCases)
+        ? statusBody.testCases.find((testCase) => testCase?.testCaseUuid === testCaseUuid)
+        : null;
+
       res.status(200).json({
         success: true,
-        status: statusBody?.statusBody?.raw || statusBody?.status || statusBody?.state || statusBody?.result || statusBody?.message || 'Unknown',
+        status: matchingTestCase?.status || 'Unknown',
         statusBody,
       });
       return;
