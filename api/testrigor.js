@@ -16,14 +16,17 @@ module.exports = async function handler(req, res) {
     }
     return parsedBaseUrl.toString().replace(/\/$/, '');
   };
-  const withTimeout = async (promise, timeoutMs) => {
-    let timeoutId;
-    const timeoutPromise = new Promise((_, reject) => {
-      timeoutId = setTimeout(() => reject(new Error(`Request timed out after ${timeoutMs}ms.`)), timeoutMs);
-    });
+  const withTimeout = async (request, timeoutMs) => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
-      return await Promise.race([promise, timeoutPromise]);
+      return await request(controller.signal);
+    } catch (error) {
+      if (controller.signal.aborted) {
+        throw new Error(`Request timed out after ${timeoutMs}ms.`);
+      }
+      throw error;
     } finally {
       clearTimeout(timeoutId);
     }
@@ -61,10 +64,11 @@ module.exports = async function handler(req, res) {
       const encodedSuiteId = encodeURIComponent(suiteId);
       const encodedTestCaseUuid = encodeURIComponent(testCaseUuid);
       const statusResponse = await withTimeout(
-        fetch(`${baseUrl}/apps/${encodedSuiteId}/testcase/status?testCaseUuids=${encodedTestCaseUuid}`, {
+        (signal) => fetch(`${baseUrl}/apps/${encodedSuiteId}/testcase/status?testCaseUuids=${encodedTestCaseUuid}`, {
           headers: {
             'auth-token': authToken,
           },
+          signal,
         }),
         10000,
       );
@@ -78,7 +82,14 @@ module.exports = async function handler(req, res) {
       }
 
       if (!statusResponse.ok) {
-        res.status(statusResponse.status).json({ success: false, message: 'The status request failed.', statusBody });
+        const upstreamMessage = statusBody?.message || statusBody?.error || statusBody?.raw;
+        res.status(statusResponse.status).json({
+          success: false,
+          message: upstreamMessage
+            ? `The status request failed: ${upstreamMessage}`
+            : `The status request failed with status ${statusResponse.status}.`,
+          statusBody,
+        });
         return;
       }
 
@@ -124,7 +135,7 @@ module.exports = async function handler(req, res) {
 
     const encodedSuiteId = encodeURIComponent(suiteId);
     const retestResponse = await withTimeout(
-      fetch(`${baseUrl}/apps/${encodedSuiteId}/retest-simple`, {
+      (signal) => fetch(`${baseUrl}/apps/${encodedSuiteId}/retest-simple`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -133,6 +144,7 @@ module.exports = async function handler(req, res) {
         body: JSON.stringify({
           testCaseUuids: [testCaseUuid],
         }),
+        signal,
       }),
       10000,
     );
@@ -146,7 +158,14 @@ module.exports = async function handler(req, res) {
     }
 
     if (!retestResponse.ok) {
-      res.status(502).json({ success: false, message: 'The retest request failed.', retestResponse: retestBody });
+      const upstreamMessage = retestBody?.message || retestBody?.error || retestBody?.raw;
+      res.status(retestResponse.status).json({
+        success: false,
+        message: upstreamMessage
+          ? `The retest request failed: ${upstreamMessage}`
+          : `The retest request failed with status ${retestResponse.status}.`,
+        retestResponse: retestBody,
+      });
       return;
     }
 
